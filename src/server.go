@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -30,19 +32,59 @@ func NewServer(ip string, port int) *Server {
 //hander协程
 func (s *Server) hander(conn net.Conn) {
 	//	//用户上线，将用户加入Map表中
-	user := NewUser(conn)
+	user := NewUser(conn, s)
 	fmt.Println("user:" + user.Name + " has login")
-	s.mapLock.Lock()
-	s.OnlineMap[user.Name] = user
-	s.mapLock.Unlock()
-	//用户上线信息广播
-	s.broadCast("has online", user)
+	//将用户上线功能给user
+	user.login()
+	//检测用户是否活跃的库
+	isLive := make(chan bool)
+	//接受用户发的消息
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			len, err := conn.Read(buf)
+			if len == 0 {
+				//s.broadCast("has logout", user)
+				user.logout()
+				return
+			}
+			if err != nil && err != io.EOF {
+				fmt.Println("messge get err:", err)
+				return
+			}
+			msg := string(buf[:len])
+			user.doMessage(msg)
+			//用户任意消息代表当前用户是否活跃
+			isLive <- true
+		}
+	}()
 	//如果直接退出那么堆上的user和user的监听携程将无人管理
-	select {}
+	for {
+		select {
+		case <-isLive:
+			//用户存活，应该重置定时器
+		//time.After(duration) 的本质：它会创建一个新的定时器，并返回一个通道（channel）。
+		//如果你不读它，在这个时间段后，系统会往这个通道里发一个当前时间。
+		case <-time.After(time.Second * 10):
+			//用户超时踢出
+			user.sendMsg("you has been logout")
+			close(user.C)
+			conn.Close()
+			delete(s.OnlineMap, user.Name)
+			/*
+				一旦 socket 被主协程 Close() 了，conn.Read 会立刻收到一个错误（通常是 use of closed network connection）。
+				子协程收到 error，进入 if err != nil 分支。
+				子协程执行 return。
+			*/
+			return
+		}
+	}
 }
 
 //为Server创建一个监听函数
 func (s *Server) start() {
+	//
+	fmt.Println("listen begin")
 	//socket listen
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.Ip, s.Port))
 	if err != nil {

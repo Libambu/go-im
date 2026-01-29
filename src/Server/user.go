@@ -64,7 +64,7 @@ func (u *User) doMessage(msg string) {
 			msg := "user:" + value.Name + " is onlne"
 			u.sendMsg(msg)
 		}
-	} else if len(msg) > 7 && msg[:7] == "rename" {
+	} else if len(msg) > 7 && msg[:6] == "rename" {
 		//用户进行昵称的修改操作
 		//消息格式 rename|newName
 		newName := strings.Split(msg, "|")[1]

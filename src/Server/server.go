@@ -65,9 +65,10 @@ func (s *Server) hander(conn net.Conn) {
 			//用户存活，应该重置定时器
 		//time.After(duration) 的本质：它会创建一个新的定时器，并返回一个通道（channel）。
 		//如果你不读它，在这个时间段后，系统会往这个通道里发一个当前时间。
-		case <-time.After(time.Second * 10):
+		case <-time.After(time.Second * 100):
 			//用户超时踢出
 			user.sendMsg("you has been logout")
+			time.Sleep(time.Second)
 			close(user.C)
 			conn.Close()
 			delete(s.OnlineMap, user.Name)
